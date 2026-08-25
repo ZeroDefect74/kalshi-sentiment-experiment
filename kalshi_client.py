@@ -64,14 +64,27 @@ def _get(path: str, params: dict | None = None) -> dict:
 
 
 def build_search_query(title: str, yes_sub_title: str) -> str:
-    """Heuristic keyword extraction for the Reddit search query. Prefers the
-    bucket-specific subtitle (e.g. a named candidate) when it's distinctive;
-    falls back to the event title. Not scientifically tuned -- first-pass
-    heuristic, revisit if the experiment shows any signal worth refining."""
-    candidate = yes_sub_title if yes_sub_title and yes_sub_title.lower() not in ("yes", "no", "") else title
-    words = re.findall(r"[A-Za-z0-9']+", candidate)
-    kept = [w for w in words if w.lower() not in STOPWORDS]
-    query = " ".join(kept[:8])  # keep queries short
+    """Heuristic keyword extraction for the Reddit search query. Combines
+    BOTH the event title and the bucket-specific subtitle -- picking one or
+    the other (an earlier version of this function) silently drops the
+    actual subject for "before/by <date>" style markets, where yes_sub_title
+    is just a bare date (e.g. title "When will Waymo announce an IPO?" +
+    yes_sub_title "Before Sep 1, 2026" must not collapse to just "Sep 1
+    2026", which is what the earlier version did -- caught via a live scan
+    2026-08-25 where every candidate's query came out as a bare date).
+    Not scientifically tuned -- first-pass heuristic, revisit if the
+    experiment shows any signal worth refining."""
+    combined = f"{title} {yes_sub_title}" if yes_sub_title.lower() not in ("yes", "no", "") else title
+    words = re.findall(r"[A-Za-z0-9']+", combined)
+    seen = set()
+    kept = []
+    for w in words:
+        lw = w.lower()
+        if lw in STOPWORDS or lw in seen:
+            continue
+        seen.add(lw)
+        kept.append(w)
+    query = " ".join(kept[:10])
     return query or title
 
 
